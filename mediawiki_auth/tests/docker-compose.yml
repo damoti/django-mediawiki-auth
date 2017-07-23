@@ -1,0 +1,47 @@
+version: '2'
+services:
+
+  nginx:
+    network_mode: host
+    build:
+      context: nginx
+
+  wiki:
+    build:
+      context: mediawiki 
+    ports:
+      - "8082:80"
+    environment:
+      - MEDIAWIKI_SITE_SERVER=//wiki.test.localhost
+      - MEDIAWIKI_SITE_NAME=MediaWiki
+      - MEDIAWIKI_SITE_LANG=en
+      - MEDIAWIKI_ADMIN_USER=admin
+      - MEDIAWIKI_ADMIN_PASS=a-very-long-password
+      - MEDIAWIKI_UPDATE=true
+      - MEDIAWIKI_VERSION=1.25.3
+      - MEDIAWIKI_DB_USER=root
+      - MEDIAWIKI_DB_PASSWORD=password
+      - MEDIAWIKI_DB_HOST=mysql
+      - MEDIAWIKI_RESTBASE_URL=http://mediawiki-node-services:7231/localhost/v1
+
+  mediawiki-node-services:
+    image: wikimedia/mediawiki-node-services
+    ports:
+      - "7231:7231"
+    volumes:
+      - /tmp/mediawiki-node-services:/data
+    environment:
+      - MEDIAWIKI_API_URL=http://wiki/api.php
+
+  mysql:
+    image: mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+    ports:
+      - "3306:3306"
+
+  postgres:
+    build:
+      context: postgres
+    ports:
+      - "5433:5432"

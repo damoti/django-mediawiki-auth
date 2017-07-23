@@ -1,0 +1,5 @@
+django_mediawiki_auth.egg-info/
+__pycache__/
+.idea/
+dist/
+build/
