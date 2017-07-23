@@ -7,11 +7,10 @@ from django.contrib.auth import get_user as get_django_user_from_request
 from django.contrib.auth import get_user_model as get_django_user_model
 from django.contrib.auth import login
 
-from .models import MediaWikiUser
+from .models import MediaWikiUser, MEDIAWIKI_USER_FK_FIELD, MEDIAWIKI_USER_FIELD, MEDIAWIKI_TABLE_PREFIX
 
 MEDIAWIKI_COOKIE_PREFIX = getattr(settings, 'MEDIAWIKI_COOKIE_PREFIX', 'mediawiki')
 MEDIAWIKI_DB_ALIAS = getattr(settings, 'MEDIAWIKI_DB_ALIAS', 'mediawiki')
-connection = connections[MEDIAWIKI_DB_ALIAS]
 
 
 def unserialize_session(val):
@@ -26,8 +25,8 @@ def unserialize_session(val):
 
 
 def get_session(session_id):
-    with connection.cursor() as c:
-        c.execute("select value from objectcache where keyname = %s", (
+    with connections[MEDIAWIKI_DB_ALIAS].cursor() as c:
+        c.execute("select value from {}objectcache where keyname = %s".format(MEDIAWIKI_TABLE_PREFIX), (
             'mediawiki:session:'+session_id,
         ))
         compressed = c.fetchone()[0]
@@ -37,7 +36,6 @@ def get_session(session_id):
 
 def get_session_from_request(request):
     session_id = request.COOKIES.get(MEDIAWIKI_COOKIE_PREFIX+'_session')
-    print('session_id: {}'.format(session_id))
     if session_id:
         return get_session(session_id)
 
@@ -57,8 +55,7 @@ def get_mediawiki_user_from_request(request):
         user = get_user(session[b'wsUserID'])
         if user:
             user_id = request.COOKIES.get(MEDIAWIKI_COOKIE_PREFIX+'UserID')
-            user_name = request.COOKIES.get(MEDIAWIKI_COOKIE_PREFIX+'UserName')
-            if user.verify_session_and_cookie_values(session, user_id, user_name):
+            if user.verify_session_and_cookie_values(session, user_id):
                 return user
 
 
@@ -71,9 +68,9 @@ def get_or_create_django_user(request):
         django_user = get_django_user_from_request(request)
         if django_user.is_authenticated:
 
-            if wiki_user.id == django_user.mediawiki_user_id:
+            if wiki_user.id == getattr(django_user, MEDIAWIKI_USER_FK_FIELD):
                 # wiki session and django sessions match
-                django_user.mediawiki_user = wiki_user
+                setattr(django_user, MEDIAWIKI_USER_FIELD, wiki_user)
                 return django_user
             else:
                 # sessions mismatch, invalidate django session
@@ -83,11 +80,11 @@ def get_or_create_django_user(request):
 
             DjangoUser = get_django_user_model()
             try:
-                django_user = DjangoUser.objects.get(mediawiki_user_id=wiki_user.id)
+                django_user = DjangoUser.objects.get(**{MEDIAWIKI_USER_FK_FIELD: wiki_user.id})
             except DjangoUser.DoesNotExist:
                 django_user = DjangoUser.objects.create_from_mediawiki_user(wiki_user)
             login(request, django_user)
-            django_user.mediawiki_user = wiki_user
+            setattr(django_user, MEDIAWIKI_USER_FIELD, wiki_user)
             return django_user
 
     return AnonymousUser()

@@ -29,7 +29,7 @@ DATABASES = {
         'NAME': 'mediawiki',
     }
 }
-AUTH_USER_MODEL = 'mediawiki_auth.DjangoUser'
+AUTH_USER_MODEL = 'mediawiki_auth.tests.User'
 ROOT_URLCONF = 'mediawiki_auth.tests.urls'
 STATIC_URL = '/static/'
 SECRET_KEY = 'test-key'
