@@ -7,10 +7,15 @@ from django.contrib.auth import get_user as get_django_user_from_request
 from django.contrib.auth import get_user_model as get_django_user_model
 from django.contrib.auth import login
 
-from .models import MediaWikiUser, MEDIAWIKI_USER_FK_FIELD, MEDIAWIKI_USER_FIELD, MEDIAWIKI_TABLE_PREFIX
+from .models import (
+    MediaWikiUser,
+    MEDIAWIKI_USER_FK_FIELD,
+    MEDIAWIKI_USER_FIELD,
+    MEDIAWIKI_TABLE_PREFIX,
+    MEDIAWIKI_DB_ALIAS
+)
 
 MEDIAWIKI_COOKIE_PREFIX = getattr(settings, 'MEDIAWIKI_COOKIE_PREFIX', 'mediawiki')
-MEDIAWIKI_DB_ALIAS = getattr(settings, 'MEDIAWIKI_DB_ALIAS', 'mediawiki')
 
 
 def unserialize_session(val):
@@ -29,9 +34,10 @@ def get_session(session_id):
         c.execute("select value from {}objectcache where keyname = %s".format(MEDIAWIKI_TABLE_PREFIX), (
             'mediawiki:session:'+session_id,
         ))
-        compressed = c.fetchone()[0]
-        serialized = zlib.decompress(compressed, -15)
-        return unserialize_session(serialized)
+        result = c.fetchone()
+        if result and result[0]:
+            serialized = zlib.decompress(result[0], -15)
+            return unserialize_session(serialized)
 
 
 def get_session_from_request(request):
@@ -42,10 +48,8 @@ def get_session_from_request(request):
 
 def get_user(user_id):
     try:
-        return MediaWikiUser.objects.\
-            using(MEDIAWIKI_DB_ALIAS).\
-            get(pk=user_id)
-    except MediaWikiUser.DoesNotExist:
+        return MediaWikiUser.objects.get(pk=user_id)
+    except (MediaWikiUser.DoesNotExist, MediaWikiUser.MultipleObjectsReturned):
         return None
 
 
@@ -57,6 +61,22 @@ def get_mediawiki_user_from_request(request):
             user_id = request.COOKIES.get(MEDIAWIKI_COOKIE_PREFIX+'UserID')
             if user.verify_session_and_cookie_values(session, user_id):
                 return user
+
+
+def get_django_user_from_mediawiki_user(wiki_user):
+    User = get_django_user_model()
+    try:
+        return User.objects.get(**{MEDIAWIKI_USER_FK_FIELD: wiki_user.id})
+    except (User.DoesNotExist, User.MultipleObjectsReturned):
+        return None
+
+
+def get_or_create_django_user_from_mediawiki_user(wiki_user):
+    DjangoUser = get_django_user_model()
+    try:
+        return DjangoUser.objects.get(**{MEDIAWIKI_USER_FK_FIELD: wiki_user.id}), False
+    except DjangoUser.DoesNotExist:
+        return DjangoUser.objects.create_from_mediawiki_user(wiki_user), True
 
 
 def get_or_create_django_user(request):
@@ -78,11 +98,7 @@ def get_or_create_django_user(request):
 
         else:
 
-            DjangoUser = get_django_user_model()
-            try:
-                django_user = DjangoUser.objects.get(**{MEDIAWIKI_USER_FK_FIELD: wiki_user.id})
-            except DjangoUser.DoesNotExist:
-                django_user = DjangoUser.objects.create_from_mediawiki_user(wiki_user)
+            django_user, _ = get_or_create_django_user_from_mediawiki_user(wiki_user)
             login(request, django_user)
             setattr(django_user, MEDIAWIKI_USER_FIELD, wiki_user)
             return django_user
