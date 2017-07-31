@@ -14,7 +14,7 @@ long_description = '\n\n'.join((
 
 setup(
     name='django-mediawiki-auth',
-    version='0.0.1',
+    version='0.0.2',
     url='https://github.com/damoti/django-mediawiki-auth',
     license='BSD',
     description='Django uses MediaWiki session to seamlessly authenticate users.',
